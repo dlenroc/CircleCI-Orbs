@@ -1,0 +1,29 @@
+description: >
+  Connect to VPN
+
+parameters:
+  config:
+    default: VPN_CONFIG
+    type: env_var_name
+    description: >
+      Base64 encoded configuration
+
+steps:
+  - run:
+      name: Connect to VPN
+      no_output_timeout: 1m
+      command: |
+        current_ip=$(curl -s https://checkip.amazonaws.com)
+        phone_home=$(netstat -an | grep ':22 .*ESTABLISHED' | head -n1 | awk '{ split($5, a, ":"); print a[1] }')
+
+        echo "${<< parameters.config >>}" \
+          | base64 --decode \
+          | sudo openvpn \
+              --daemon \
+              --config /dev/stdin \
+              --route $phone_home 255.255.255.255 net_gateway \
+              --route 169.254.0.0 255.255.0.0 net_gateway
+
+        while [ "$current_ip" == "$(curl -s https://checkip.amazonaws.com --max-time 1 --retry-delay 0 --retry 60)" ]; do
+          sleep 0.1;
+        done
