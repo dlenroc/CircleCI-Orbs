@@ -2,14 +2,23 @@ description: >
   Executes given steps after a VPN connection is established
 
 parameters:
-  executor:
-    type: executor
-    default: default
+  username:
+    default: VPN_USERNAME
+    type: env_var_name
+  password:
+    default: VPN_PASSWORD
+    type: env_var_name
+  totp-secret:
+    default: VPN_TOTP_SECRET
+    type: env_var_name
   config:
     default: VPN_CONFIG
     type: env_var_name
     description: >
       Base64 encoded configuration
+  executor:
+    type: executor
+    default: default
   steps:
     type: steps
     default: []
@@ -19,6 +28,9 @@ executor: << parameters.executor >>
 steps:
   - install
   - connect:
+      username: << parameters.username >>
+      password: << parameters.password >>
+      totp-secret: << parameters.totp-secret >>
       config: << parameters.config >>
   - steps: << parameters.steps >>
   - disconnect

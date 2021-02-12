@@ -5,11 +5,15 @@ steps:
   - run:
       name: Generate OpenVPN cache key
       command: |
-        lsb_release -a > /tmp/openvpn.rev
+        rev_file=/tmp/openvpn.rev
+        echo openvpn > $rev_file
+        echo oathtool >> $rev_file
+        echo net-tools >> $rev_file
+        lsb_release -a >> $rev_file
 
   - restore_cache:
       name: Restore OpenVPN package
-      key: openvpn-{{ checksum "/tmp/openvpn.rev" }}
+      key: '{{ checksum "/tmp/openvpn.rev" }}'
 
   - run:
       name: Install OpenVPN
@@ -19,13 +23,16 @@ steps:
         if [ ! -d "${package}" ]; then
           mkdir -p "${package}"
           sudo apt-get update
-          sudo apt-get install -d -o=dir::cache="${package}" openvpn net-tools
+          sudo apt-get install -d -o=dir::cache="${package}" \
+            openvpn \
+            oathtool \
+            net-tools
         fi
 
         sudo dpkg -R -i "${package}"
 
   - save_cache:
       name: Cache OpenVPN package
-      key: openvpn-{{ checksum "/tmp/openvpn.rev" }}
+      key: '{{ checksum "/tmp/openvpn.rev" }}'
       paths:
         - /tmp/openvpn/archives
