@@ -1,0 +1,38 @@
+description: >
+  Install dependencies
+
+parameters:
+  dependencies:
+    type: string
+
+steps:
+  - run:
+      name: Generate cache key for << parameters.dependencies >>
+      command: |
+        rev=~/.node-script/.rev
+        mkdir -p $(dirname $rev)
+        echo "<< parameters.dependencies >>" > $rev
+        lsb_release -a >> $rev
+
+  - restore_cache:
+      name: Restore << parameters.dependencies >>
+      key: node-script-{{ checksum "~/.node-script/.rev" }}
+
+  - run:
+      name: Install << parameters.dependencies >>
+      command: |
+        target=~/.node-script
+        cache="${target}/.cache/<< parameters.dependencies >>"
+
+        if [ ! -d "${cache}" ]; then
+          mkdir -p "${cache}"
+          npm install -g --no-audit --prefix "${cache}" << parameters.dependencies >>
+        fi
+
+        cp -RT "${cache}/" "${target}/"
+
+  - save_cache:
+      name: Cache << parameters.dependencies >>
+      key: node-script-{{ checksum "~/.node-script/.rev" }}
+      paths:
+        - ~/.node-script/.cache/<< parameters.dependencies >>

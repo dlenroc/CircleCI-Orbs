@@ -1,0 +1,29 @@
+description: >
+  Execute JS
+
+parameters:
+  title:
+    type: string
+    default: Execute javascript
+  dependencies:
+    type: string
+    default: ""
+  command:
+    type: string
+
+steps:
+  - when:
+      condition: << parameters.dependencies >>
+      steps:
+        - install:
+            dependencies: << parameters.dependencies >>
+
+  - run:
+      name: << parameters.title >>
+      command: |
+        export NODE_PATH="${HOME}/.node-script/lib/node_modules:${NODE_PATH}:$(npm root --q -g)"
+        node --enable-source-maps --unhandled-rejections=strict \<<'EOF'
+        (async () => {
+        << parameters.command >>
+        })();
+        EOF
