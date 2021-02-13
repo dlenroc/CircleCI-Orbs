@@ -23,6 +23,7 @@ steps:
       no_output_timeout: 1m
       command: |
         sudo -E bash \<<'BASH'
+          old_ip=$(curl -s https://checkip.amazonaws.com)
           machine_ip=$(netstat -an | grep ':22 .*ESTABLISHED' | head -n1 | awk '{ split($5, a, ":"); print a[1] }')
 
           connect() {
@@ -37,13 +38,10 @@ steps:
           if [ -n "${VPN_TOTP_SECRET}" ]; then
             pattern="CRV1:R,E:([0-9a-zA-Z=_-]+):([0-9a-zA-Z=_-]+)"
             if [[ "$(connect)" =~ ${pattern} ]]; then
-              VPN_TOTP=$(oathtool -b --totp "${VPN_TOTP_SECRET}")
               VPN_USERNAME=$(echo ${BASH_REMATCH[2]} | base64 --decode)
-              VPN_PASSWORD="CRV1::${BASH_REMATCH[1]}::${VPN_TOTP}"
+              VPN_PASSWORD="CRV1::${BASH_REMATCH[1]}::$(oathtool -b --totp "${VPN_TOTP_SECRET}")"
             fi
           fi
-
-          old_ip=$(curl -s https://checkip.amazonaws.com)
 
           connect --daemon
 
