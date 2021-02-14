@@ -1,0 +1,26 @@
+description: >
+  Run detekt
+
+executor: << parameters.executor >>
+
+parameters:
+  version:
+    default: 1.15.0
+    type: string
+  config:
+    default: ""
+    type: string
+  token:
+    default: GITHUB_TOKEN
+    type: env_var_name
+  executor:
+    type: executor
+    default: default
+
+steps:
+  - checkout
+  - install:
+      version: << parameters.version >>
+  - check:
+      token: << parameters.token >>
+      config: << parameters.config >>

@@ -1,0 +1,113 @@
+description: >
+  Check code with detekt
+
+parameters:
+  token:
+    default: GITHUB_TOKEN
+    type: env_var_name
+  config:
+    default: ""
+    type: string
+
+steps:
+  - run:
+      name: Run detekt
+      command: |
+        export DETEKT=~/.detekt
+        export PATH="$PATH:$DETEKT"
+        export DETEKT_CONFIG_PATH="<< parameters.config >>"
+
+        detekt \
+          ${DETEKT_CONFIG_PATH:+--config "${DETEKT_CONFIG_PATH}"} \
+          --plugins "$DETEKT/detekt-formatting.jar" \
+          --report "xml:$DETEKT/report.xml" \
+          --build-upon-default-config \
+            || true
+
+  - node-script/execute:
+      title: Prepare result for attachment
+      command: |
+        const fs = require('fs');
+        const homedir = require('os').homedir();
+
+        let junitResult = ''
+        junitResult += `<?xml version="1.0" encoding="UTF-8"?>`
+        junitResult += `<testsuite name="detekt">`
+
+        const checkstyle = fs.readFileSync(homedir + '/.detekt/report.xml', { encoding: 'utf-8' })
+
+        for (const groups of checkstyle.matchAll(/<file name=".+?\/project\/(.+)">([\s\S]*?)<\/file>/g)) {
+          const path = groups[1]
+          const result = groups[2]
+
+          junitResult += `<testcase name="${path}" time="0">`
+          junitResult += `<error type="error"><![CDATA[`
+
+          for (const violation of result.matchAll(/line="(\d+)" column="(\d+)" severity="(.+?)" message="(.+?)" source="(.+?)"/g)) {
+            junitResult += `${violation[1]}:${violation[2]} [${violation[5].replace(/^detekt\./, '')}] - ${violation[4]}\n`
+          }
+
+          junitResult += `]]></error>`
+          junitResult += `</testcase>`
+        }
+
+        junitResult += `</testsuite>`
+
+        dir = homedir + '/.detekt/junit'
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir);
+        }
+
+        fs.writeFileSync(dir + '/report.xml', junitResult)
+
+  - store_test_results:
+      path: ~/.detekt/junit
+
+  - node-script/execute:
+      title: Remove outdated review comments
+      command: |
+        const github = require('@actions/github').getOctokit(process.env["<< parameters.token >>"]);
+        const context = {
+          repo: process.env.CIRCLE_PROJECT_REPONAME,
+          owner: process.env.CIRCLE_PROJECT_USERNAME,
+          pull_number: process.env.CIRCLE_PULL_REQUEST?.match(/\d+/)?.[0]
+        };
+
+        if (!context.pull_number && process.env["<< parameters.token >>"]) {
+          return;
+        }
+
+        for await (const { data: reviews } of github.paginate.iterator(github.pulls.listReviews, context)) {
+          for (const review of reviews) {
+            for await (const { data: comments } of github.paginate.iterator(github.pulls.listCommentsForReview, { review_id: review.id, ...context })) {
+              for (const comment of comments) {
+                if (comment.body.includes('[reviewdog]') && comment.body.includes('[detekt]')) {
+                  // delete review comment
+                  if (review.body) {
+                    review.body = ''
+                    await github.pulls.updateReview({ body: '', review_id: review.id, ...context })
+                  }
+
+                  // delete outdated review comments
+                  if (!comment.position) {
+                    github.pulls.deleteReviewComment({ comment_id: comment.id, ...context })
+                  }
+                }
+              }
+            }
+          }
+        }
+
+  - run:
+      name: Publish checkstyle report
+      command: |
+        export DETEKT=~/.detekt
+        export PATH="$PATH:$DETEKT"
+        export REVIEWDOG_GITHUB_API_TOKEN=${<< parameters.token >>}
+
+        reviewdog \
+          -name=detekt \
+          -reporter=github-pr-review \
+          -fail-on-error \
+          -f=checkstyle \
+          <"$DETEKT/report.xml"

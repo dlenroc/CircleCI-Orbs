@@ -1,0 +1,40 @@
+description: >
+  Install node-script, reviewdog, and detekt
+
+parameters:
+  version:
+    default: 1.15.0
+    type: string
+
+steps:
+  - node-script/install:
+      dependencies: "@actions/github@4.0.0"
+
+  - run:
+      name: Generate detekt cache key
+      command: |
+        lsb_release -a > /tmp/detekt.rev
+
+  - restore_cache:
+      name: Restore detekt
+      key: '{{ checksum "/tmp/detekt.rev" }}-detekt-<< parameters.version >>'
+
+  - run:
+      name: Install detekt
+      command: |
+        detekt_path=~/.detekt
+
+        if [ ! -d "${detekt_path}" ]; then
+          mkdir -p "${detekt_path}"
+          cd "${detekt_path}"
+          export DETEKT_VERSION="<< parameters.version >>"
+          curl -sfL https://raw.githubusercontent.com/reviewdog/reviewdog/master/install.sh | sh -s -- -b .
+          curl -sSLO "https://github.com/detekt/detekt/releases/download/v${DETEKT_VERSION}/detekt" && chmod a+x detekt
+          curl -sSL -o detekt-formatting.jar "https://repo1.maven.org/maven2/io/gitlab/arturbosch/detekt/detekt-formatting/${DETEKT_VERSION}/detekt-formatting-${DETEKT_VERSION}.jar"
+        fi
+
+  - save_cache:
+      name: Cache detekt
+      key: '{{ checksum "/tmp/detekt.rev" }}-detekt-<< parameters.version >>'
+      paths:
+        - ~/.detekt

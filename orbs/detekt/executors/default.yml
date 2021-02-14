@@ -1,0 +1,7 @@
+description: >
+  Default detekt executor
+
+resource_class: small
+
+docker:
+  - image: cimg/openjdk:11.0-node

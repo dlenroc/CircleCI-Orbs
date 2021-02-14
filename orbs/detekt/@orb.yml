@@ -1,0 +1,11 @@
+version: 2.1
+
+description: >
+  Static code analysis for Kotlin
+
+display:
+  home_url: "https://github.com/dlenroc/circleci-orbs"
+  source_url: "https://github.com/dlenroc/circleci-orbs/tree/main/orbs/detekt"
+
+orbs:
+  node-script: dlenroc/node-script@1.0.0
