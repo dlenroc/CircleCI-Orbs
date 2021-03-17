@@ -19,7 +19,6 @@ steps:
 
         detekt \
           ${DETEKT_CONFIG_PATH:+--config "${DETEKT_CONFIG_PATH}"} \
-          --plugins "$DETEKT/detekt-formatting.jar" \
           --report "xml:$DETEKT/report.xml" \
           --build-upon-default-config \
             || true
