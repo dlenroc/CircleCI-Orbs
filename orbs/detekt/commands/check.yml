@@ -6,7 +6,7 @@ parameters:
     default: GITHUB_TOKEN
     type: env_var_name
   config:
-    default: ""
+    default: ''
     type: string
 
 steps:

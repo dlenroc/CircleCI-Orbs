@@ -8,7 +8,7 @@ parameters:
     default: 1.15.0
     type: string
   config:
-    default: ""
+    default: ''
     type: string
   token:
     default: GITHUB_TOKEN

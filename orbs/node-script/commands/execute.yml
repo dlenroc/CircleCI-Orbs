@@ -7,7 +7,7 @@ parameters:
     default: Execute javascript
   dependencies:
     type: string
-    default: ""
+    default: ''
   command:
     type: string
 
