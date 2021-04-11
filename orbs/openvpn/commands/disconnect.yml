@@ -5,3 +5,4 @@ steps:
   - run:
       name: Disconnect from VPN
       command: sudo killall openvpn
+      when: always

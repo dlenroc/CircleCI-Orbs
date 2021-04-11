@@ -35,17 +35,31 @@ steps:
               $@
           }
 
-          if [ -n "${VPN_TOTP_SECRET}" ]; then
-            pattern="CRV1:R,E:([0-9a-zA-Z=_-]+):([0-9a-zA-Z=_-]+)"
-            if [[ "$(connect)" =~ ${pattern} ]]; then
-              VPN_USERNAME=$(echo ${BASH_REMATCH[2]} | base64 --decode)
-              VPN_PASSWORD="CRV1::${BASH_REMATCH[1]}::$(oathtool -b --totp "${VPN_TOTP_SECRET}")"
+          VPN_ORIGINAL_USERNAME=$VPN_USERNAME
+          VPN_ORIGINAL_PASSWORD=$VPN_PASSWORD
+
+          while true; do
+            if [ -n "${VPN_TOTP_SECRET}" ]; then
+              pattern="CRV1:R,E:([0-9a-zA-Z=_-]+):([0-9a-zA-Z=_-]+)"
+              if [[ "$(connect)" =~ ${pattern} ]]; then
+                VPN_USERNAME=$(echo ${BASH_REMATCH[2]} | base64 --decode)
+                VPN_PASSWORD="CRV1::${BASH_REMATCH[1]}::$(oathtool -b --totp "${VPN_TOTP_SECRET}")"
+              fi
             fi
-          fi
 
-          connect --daemon
+            connect --daemon --writepid /run/openvpn/ovpn.pid
 
-          while [ "$old_ip" == "$(curl -s https://checkip.amazonaws.com --connect-timeout 1 --max-time 1 --retry 60 --retry-delay 0)" ]; do
-            sleep 0.1
+            while [ "$old_ip" == "$(curl -s https://checkip.amazonaws.com --connect-timeout 1 --max-time 1 --retry 60 --retry-delay 0)" ]; do
+              if ! ps -p $(cat /run/openvpn/ovpn.pid) > /dev/null; then
+                rm /run/openvpn/ovpn.pid
+                VPN_USERNAME=$VPN_ORIGINAL_USERNAME
+                VPN_PASSWORD=$VPN_ORIGINAL_PASSWORD
+                continue 2
+              fi
+
+              sleep 0.1
+            done
+
+            break
           done
         BASH
