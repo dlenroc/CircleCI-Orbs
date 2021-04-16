@@ -4,6 +4,9 @@ description: >
 parameters:
   dependencies:
     type: string
+  cache-version:
+    default: v1
+    type: string
 
 steps:
   - run:
@@ -16,7 +19,7 @@ steps:
 
   - restore_cache:
       name: Restore << parameters.dependencies >>
-      key: node-script-{{ checksum "~/.node-script/.rev" }}
+      key: node-script-<< parameters.cache-version >>-{{ checksum "~/.node-script/.rev" }}
 
   - run:
       name: Install << parameters.dependencies >>
@@ -33,6 +36,6 @@ steps:
 
   - save_cache:
       name: Cache << parameters.dependencies >>
-      key: node-script-{{ checksum "~/.node-script/.rev" }}
+      key: node-script-<< parameters.cache-version >>-{{ checksum "~/.node-script/.rev" }}
       paths:
         - ~/.node-script/.cache/<< parameters.dependencies >>
