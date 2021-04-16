@@ -1,6 +1,11 @@
 description: >
   Install OpenVPN client
 
+parameters:
+  cache-version:
+    default: v1
+    type: string
+
 steps:
   - run:
       name: Generate OpenVPN cache key
@@ -13,7 +18,7 @@ steps:
 
   - restore_cache:
       name: Restore OpenVPN package
-      key: '{{ checksum "/tmp/openvpn.rev" }}'
+      key: openvpn-<< parameters.cache-version >>-{{ checksum "/tmp/openvpn.rev" }}
 
   - run:
       name: Install OpenVPN
@@ -33,6 +38,6 @@ steps:
 
   - save_cache:
       name: Cache OpenVPN package
-      key: '{{ checksum "/tmp/openvpn.rev" }}'
+      key: openvpn-<< parameters.cache-version >>-{{ checksum "/tmp/openvpn.rev" }}
       paths:
         - /tmp/openvpn/archives

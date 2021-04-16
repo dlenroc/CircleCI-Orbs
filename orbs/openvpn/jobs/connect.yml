@@ -19,6 +19,9 @@ parameters:
   executor:
     type: executor
     default: default
+  cache-version:
+    default: v1
+    type: string
   steps:
     type: steps
     default: []
@@ -26,7 +29,8 @@ parameters:
 executor: << parameters.executor >>
 
 steps:
-  - install
+  - install:
+      cache-version: << parameters.cache-version >>
   - connect:
       username: << parameters.username >>
       password: << parameters.password >>
