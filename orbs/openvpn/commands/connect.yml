@@ -23,6 +23,11 @@ steps:
       no_output_timeout: 1m
       command: |
         sudo -E bash \<<'BASH'
+          VPN_USERNAME=${<< parameters.username >>}
+          VPN_PASSWORD=${<< parameters.password >>}
+          VPN_TOTP_SECRET=${<< parameters.totp-secret >>}
+          VPN_CONFIG=${<< parameters.config >>}
+
           old_ip=$(curl -s https://checkip.amazonaws.com)
           machine_ip=$(netstat -an | grep ':22 .*ESTABLISHED' | head -n1 | awk '{ split($5, a, ":"); print a[1] }')
 
