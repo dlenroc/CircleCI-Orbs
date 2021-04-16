@@ -3,7 +3,7 @@ description: >
 
 parameters:
   version:
-    default: 1.15.0
+    default: 1.16.0
     type: string
 
 steps:
@@ -28,9 +28,11 @@ steps:
           mkdir -p "${detekt_path}"
           cd "${detekt_path}"
           export DETEKT_VERSION="<< parameters.version >>"
+          curl -sSL -o detekt.jar "https://repo1.maven.org/maven2/io/gitlab/arturbosch/detekt/detekt-cli/${DETEKT_VERSION}/detekt-cli-${DETEKT_VERSION}-all.jar" &
+          curl -sSL -o detekt-formatting.jar "https://repo1.maven.org/maven2/io/gitlab/arturbosch/detekt/detekt-formatting/${DETEKT_VERSION}/detekt-formatting-${DETEKT_VERSION}.jar" &
           curl -sfL https://raw.githubusercontent.com/reviewdog/reviewdog/master/install.sh | sh -s -- -b .
-          curl -sSLO "https://github.com/detekt/detekt/releases/download/v${DETEKT_VERSION}/detekt" && chmod a+x detekt
-          curl -sSL -o detekt-formatting.jar "https://repo1.maven.org/maven2/io/gitlab/arturbosch/detekt/detekt-formatting/${DETEKT_VERSION}/detekt-formatting-${DETEKT_VERSION}.jar"
+          wait
+
         fi
 
   - save_cache:
