@@ -5,7 +5,7 @@ executor: << parameters.executor >>
 
 parameters:
   version:
-    default: 1.15.0
+    default: 1.16.0
     type: string
   config:
     default: ''
@@ -16,11 +16,15 @@ parameters:
   executor:
     type: executor
     default: default
+  cache-version:
+    default: v1
+    type: string
 
 steps:
   - checkout
   - install:
       version: << parameters.version >>
+      cache-version: << parameters.cache-version >>
   - check:
       token: << parameters.token >>
       config: << parameters.config >>

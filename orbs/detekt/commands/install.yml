@@ -5,10 +5,14 @@ parameters:
   version:
     default: 1.16.0
     type: string
+  cache-version:
+    default: v1
+    type: string
 
 steps:
   - node-script/install:
-      dependencies: '@actions/github@4.0.0'
+      dependencies: "@actions/github@4.0.0"
+      cache-version: << parameters.cache-version >>
 
   - run:
       name: Generate detekt cache key
@@ -17,7 +21,7 @@ steps:
 
   - restore_cache:
       name: Restore detekt
-      key: '{{ checksum "/tmp/detekt.rev" }}-detekt-<< parameters.version >>'
+      key: detekt-<< parameters.cache-version >>-<< parameters.version >>-{{ checksum "/tmp/detekt.rev" }}
 
   - run:
       name: Install detekt
@@ -32,11 +36,10 @@ steps:
           curl -sSL -o detekt-formatting.jar "https://repo1.maven.org/maven2/io/gitlab/arturbosch/detekt/detekt-formatting/${DETEKT_VERSION}/detekt-formatting-${DETEKT_VERSION}.jar" &
           curl -sfL https://raw.githubusercontent.com/reviewdog/reviewdog/master/install.sh | sh -s -- -b .
           wait
-
         fi
 
   - save_cache:
       name: Cache detekt
-      key: '{{ checksum "/tmp/detekt.rev" }}-detekt-<< parameters.version >>'
+      key: detekt-<< parameters.cache-version >>-<< parameters.version >>-{{ checksum "/tmp/detekt.rev" }}
       paths:
         - ~/.detekt
