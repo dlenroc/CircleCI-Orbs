@@ -1,8 +1,14 @@
 description: >
   Disconnect from VPN
 
+parameters:
+  when:
+    default: on_success
+    type: enum
+    enum: [always, on_fail, on_success]
+
 steps:
   - run:
       name: Disconnect from VPN
+      when: << parameters.when >>
       command: sudo killall openvpn
-      when: always

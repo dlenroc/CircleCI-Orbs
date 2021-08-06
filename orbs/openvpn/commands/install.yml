@@ -5,23 +5,19 @@ parameters:
   cache-version:
     default: v1
     type: string
+  when:
+    default: on_success
+    type: enum
+    enum: [always, on_fail, on_success]
 
 steps:
-  - run:
-      name: Generate OpenVPN cache key
-      command: |
-        rev_file=/tmp/openvpn.rev
-        echo openvpn > $rev_file
-        echo oathtool >> $rev_file
-        echo net-tools >> $rev_file
-        lsb_release -a >> $rev_file
-
   - restore_cache:
       name: Restore OpenVPN package
-      key: openvpn-<< parameters.cache-version >>-{{ checksum "/tmp/openvpn.rev" }}
+      key: openvpn-{{ arch }}-<< parameters.cache-version >>
 
   - run:
       name: Install OpenVPN
+      when: << parameters.when >>
       command: |
         package=/tmp/openvpn
 
@@ -38,6 +34,6 @@ steps:
 
   - save_cache:
       name: Cache OpenVPN package
-      key: openvpn-<< parameters.cache-version >>-{{ checksum "/tmp/openvpn.rev" }}
+      key: openvpn-{{ arch }}-<< parameters.cache-version >>
       paths:
         - /tmp/openvpn/archives

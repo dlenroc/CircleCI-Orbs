@@ -37,4 +37,3 @@ steps:
       totp-secret: << parameters.totp-secret >>
       config: << parameters.config >>
   - steps: << parameters.steps >>
-  - disconnect

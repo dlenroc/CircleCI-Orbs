@@ -16,10 +16,15 @@ parameters:
     type: env_var_name
     description: >
       Base64 encoded configuration
+  when:
+    default: on_success
+    type: enum
+    enum: [always, on_fail, on_success]
 
 steps:
   - run:
       name: Connect to VPN
+      when: << parameters.when >>
       no_output_timeout: 1m
       command: |
         sudo -E bash \<<'BASH'
@@ -55,11 +60,13 @@ steps:
             connect --daemon --writepid /run/openvpn/ovpn.pid
 
             while [ "$old_ip" == "$(curl -s https://checkip.amazonaws.com --connect-timeout 1 --max-time 1 --retry 60 --retry-delay 0)" ]; do
-              if ! ps -p $(cat /run/openvpn/ovpn.pid) > /dev/null; then
-                rm /run/openvpn/ovpn.pid
-                VPN_USERNAME=$VPN_ORIGINAL_USERNAME
-                VPN_PASSWORD=$VPN_ORIGINAL_PASSWORD
-                continue 2
+              if [ -f "/run/openvpn/ovpn.pid" ]; then
+                if ! ps -p $(cat /run/openvpn/ovpn.pid) > /dev/null; then
+                  rm /run/openvpn/ovpn.pid
+                  VPN_USERNAME=$VPN_ORIGINAL_USERNAME
+                  VPN_PASSWORD=$VPN_ORIGINAL_PASSWORD
+                  continue 2
+                fi
               fi
 
               sleep 0.1
