@@ -4,25 +4,23 @@ description: >
 parameters:
   dependencies:
     type: string
+  when:
+    type: enum
+    default: on_success
+    enum: [always, on_fail, on_success]
   cache-version:
     default: v1
     type: string
 
 steps:
-  - run:
-      name: Generate cache key for << parameters.dependencies >>
-      command: |
-        rev=~/.node-script/.rev
-        mkdir -p $(dirname $rev)
-        echo "<< parameters.dependencies >>" > $rev
-        lsb_release -a >> $rev
-
   - restore_cache:
       name: Restore << parameters.dependencies >>
-      key: node-script-<< parameters.cache-version >>-{{ checksum "~/.node-script/.rev" }}
+      when: << parameters.when >>
+      key: node-script-{{ arch }}-<< parameters.cache-version >> | << parameters.dependencies >>
 
   - run:
       name: Install << parameters.dependencies >>
+      when: << parameters.when >>
       command: |
         target=~/.node-script
         cache="${target}/.cache/<< parameters.dependencies >>"
@@ -36,6 +34,7 @@ steps:
 
   - save_cache:
       name: Cache << parameters.dependencies >>
-      key: node-script-<< parameters.cache-version >>-{{ checksum "~/.node-script/.rev" }}
+      when: << parameters.when >>
+      key: node-script-{{ arch }}-<< parameters.cache-version >> | << parameters.dependencies >>
       paths:
         - ~/.node-script/.cache/<< parameters.dependencies >>

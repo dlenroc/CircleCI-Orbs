@@ -10,6 +10,19 @@ parameters:
     default: ''
   command:
     type: string
+  background:
+    type: boolean
+    default: false
+  working-directory:
+    type: string
+    default: .
+  no-output-timeout:
+    type: string
+    default: 10m
+  when:
+    type: enum
+    default: on_success
+    enum: [always, on_fail, on_success]
 
 steps:
   - when:
@@ -17,9 +30,14 @@ steps:
       steps:
         - install:
             dependencies: << parameters.dependencies >>
+            when: << parameters.when >>
 
   - run:
       name: << parameters.title >>
+      background: << parameters.background >>
+      working_directory: << parameters.working-directory >>
+      no_output_timeout: << parameters.no-output-timeout >>
+      when: << parameters.when >>
       command: |
         export NODE_PATH="${HOME}/.node-script/lib/node_modules:${NODE_PATH}:$(npm root --q -g)"
         node --enable-source-maps --unhandled-rejections=strict \<<'EOF'
