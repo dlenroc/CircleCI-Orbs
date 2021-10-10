@@ -23,55 +23,101 @@ parameters:
 
 steps:
   - run:
+      name: Check VPN requirements
+      when: << parameters.when >>
+      command: |
+        sudo killall openvpn || true
+
+        if [ -z "$CIRCLE_IP" ]; then
+          echo "export CIRCLE_IP=$(curl -s https://checkip.amazonaws.com)" >> $BASH_ENV
+        fi
+
+        if ! [ -x "$(command -v openvpn)" ]; then
+          echo 'Error: openvpn is not installed.' >&2
+          exit 1
+        fi
+
+        if [[ -z "${<< parameters.config >>:-}" ]]; then
+          echo "Error: << parameters.config >> must be set and contain base64 encoded VPN configuration." >&2
+          exit 1
+        fi
+  - run:
       name: Connect to VPN
+      when: << parameters.when >>
+      background: true
+      command: |
+        sudo -E bash \<<'BASH'
+        export VPN_CONFIG="${<< parameters.config >>:-}"
+        export VPN_USERNAME="${<< parameters.username >>:-}"
+        export VPN_PASSWORD="${<< parameters.password >>:-}"
+        export VPN_TOTP_SECRET="${<< parameters.totp-secret >>:-}"
+        export MACHINE_IP=$(netstat -an | grep ':22 .*ESTABLISHED' | head -n1 | awk '{ split($5, a, ":"); print a[1] }')
+
+        totp() {
+          secret="${1}$(printf "%$(((8 - ${#1}) % 8))s" | tr " " "=")"
+          key="$(base32 -d \<<<"$secret" | xxd -p | tr -cd 0-9A-Fa-f)"
+          mac=$(printf "%016X" "$((($(date +%s)) / 30))" | xxd -r -p | openssl sha1 -binary -mac hmac -macopt "hexkey:${key}" | xxd -p)
+          offset="$((16#${mac:39:1} * 2))"
+          printf "%06d\n" "$(((0x${mac:offset:8} & 0x7FFFFFFF) % 1000000))"
+        }
+
+        vpn() {
+          if [[ -z "${VPN_TOTP_SECRET}" ]]; then
+            openvpn \
+              --script-security 2 \
+              --setenv PATH '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin' \
+              --up /etc/openvpn/update-systemd-resolved \
+              --up-restart \
+              --down /etc/openvpn/update-systemd-resolved \
+              --down-pre \
+              --route ${MACHINE_IP} 255.255.255.255 net_gateway \
+              --route 169.254.0.0 255.255.0.0 net_gateway \
+              --config <(echo "${VPN_CONFIG}" | base64 --decode) \
+              ${VPN_USERNAME:+--auth-user-pass <(echo -e "${VPN_USERNAME}\n${VPN_PASSWORD}")}
+          else
+            VPN_TOTP="$(totp "$VPN_TOTP_SECRET")" \
+            expect \<<-'EOF'
+              spawn bash -c "\
+                openvpn \
+                  --script-security 2 \
+                  --setenv PATH '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin' \
+                  --up /etc/openvpn/update-systemd-resolved \
+                  --up-restart \
+                  --down /etc/openvpn/update-systemd-resolved \
+                  --down-pre \
+                  --route \${MACHINE_IP} 255.255.255.255 net_gateway \
+                  --route 169.254.0.0 255.255.0.0 net_gateway \
+                  --config <(echo \"\${VPN_CONFIG}\" | base64 --decode) \
+                  \${VPN_USERNAME:+--auth-user-pass <(echo -e \"\${VPN_USERNAME}\n\${VPN_PASSWORD}\")} \
+                  \${VPN_TOTP_SECRET:+--connect-retry-max 5 --connect-retry 0 --auth-retry interact}\
+              "
+
+              expect "\nCHALLENGE:"
+              send "$::env(VPN_TOTP)\n"
+              expect -timeout -1 eof
+        EOF
+          fi
+        }
+
+        vpn
+        BASH
+  - run:
+      name: Wait for VPN connection to be established
       when: << parameters.when >>
       no_output_timeout: 1m
       command: |
-        sudo -E bash \<<'BASH'
-          VPN_USERNAME=${<< parameters.username >>}
-          VPN_PASSWORD=${<< parameters.password >>}
-          VPN_TOTP_SECRET=${<< parameters.totp-secret >>}
-          VPN_CONFIG=${<< parameters.config >>}
+        set +e
 
-          old_ip=$(curl -s https://checkip.amazonaws.com)
-          machine_ip=$(netstat -an | grep ':22 .*ESTABLISHED' | head -n1 | awk '{ split($5, a, ":"); print a[1] }')
+        echo "CircleCI IP: ${CIRCLE_IP}"
 
-          connect() {
-            openvpn \
-              --route 169.254.0.0 255.255.0.0 net_gateway \
-              --route ${machine_ip} 255.255.255.255 net_gateway \
-              --config <(echo "${VPN_CONFIG}" | base64 --decode) \
-              ${VPN_USERNAME:+--auth-user-pass <(echo -e "${VPN_USERNAME}\n${VPN_PASSWORD}")} \
-              $@
-          }
+        while true; do
+          IP="$(curl -s https://checkip.amazonaws.com)"
 
-          VPN_ORIGINAL_USERNAME=$VPN_USERNAME
-          VPN_ORIGINAL_PASSWORD=$VPN_PASSWORD
-
-          while true; do
-            if [ -n "${VPN_TOTP_SECRET}" ]; then
-              pattern="CRV1:R,E:([0-9a-zA-Z=_-]+):([0-9a-zA-Z=_-]+)"
-              if [[ "$(connect)" =~ ${pattern} ]]; then
-                VPN_USERNAME=$(echo ${BASH_REMATCH[2]} | base64 --decode)
-                VPN_PASSWORD="CRV1::${BASH_REMATCH[1]}::$(oathtool -b --totp "${VPN_TOTP_SECRET}")"
-              fi
-            fi
-
-            connect --daemon --writepid /run/openvpn/ovpn.pid
-
-            while [ "$old_ip" == "$(curl -s https://checkip.amazonaws.com --connect-timeout 1 --max-time 1 --retry 60 --retry-delay 0)" ]; do
-              if [ -f "/run/openvpn/ovpn.pid" ]; then
-                if ! ps -p $(cat /run/openvpn/ovpn.pid) > /dev/null; then
-                  rm /run/openvpn/ovpn.pid
-                  VPN_USERNAME=$VPN_ORIGINAL_USERNAME
-                  VPN_PASSWORD=$VPN_ORIGINAL_PASSWORD
-                  continue 2
-                fi
-              fi
-
-              sleep 0.1
-            done
-
+          if [[ -n "${IP}" && "${CIRCLE_IP}" != "${IP}" ]]; then
             break
-          done
-        BASH
+          fi
+
+          sleep 1
+        done
+
+        echo "Current IP: ${IP}"

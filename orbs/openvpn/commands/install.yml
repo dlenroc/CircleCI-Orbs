@@ -25,9 +25,10 @@ steps:
           mkdir -p "${package}"
           sudo apt-get update
           sudo apt-get install -d -o=dir::cache="${package}" \
+            expect \
+            net-tools \
             openvpn \
-            oathtool \
-            net-tools
+            openvpn-systemd-resolved
         fi
 
         sudo dpkg -R -i "${package}"

@@ -11,4 +11,4 @@ steps:
   - run:
       name: Disconnect from VPN
       when: << parameters.when >>
-      command: sudo killall openvpn
+      command: sudo killall openvpn || true

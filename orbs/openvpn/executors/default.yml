@@ -2,4 +2,4 @@ description: >
   Default OpenVPN executor
 
 machine:
-  image: ubuntu-2004:202101-01
+  image: ubuntu-2004:202107-02
