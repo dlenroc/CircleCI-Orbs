@@ -51,7 +51,14 @@ steps:
         export VPN_USERNAME="${<< parameters.username >>:-}"
         export VPN_PASSWORD="${<< parameters.password >>:-}"
         export VPN_TOTP_SECRET="${<< parameters.totp-secret >>:-}"
-        export MACHINE_IP=$(netstat -an | grep ':22 .*ESTABLISHED' | head -n1 | awk '{ split($5, a, ":"); print a[1] }')
+        export SYSTEM_DNS=$(systemd-resolve --status | grep 'DNS Servers' | awk '{print $3}')
+        export MACHINE_IP=$(ss -Hnto state established '( sport = :ssh )' | head -n1 | awk '{ split($4, a, ":"); print a[1] }')
+
+        RUNNER_IPS=()
+        for IP in $(host runner.circleci.com | awk '{ print $4; }')
+        do
+          RUNNER_IPS+=(--route $IP 255.255.255.255 net_gateway)
+        done
 
         totp() {
           secret="${1}$(printf "%$(((8 - ${#1}) % 8))s" | tr " " "=")"
@@ -70,11 +77,15 @@ steps:
               --up-restart \
               --down /etc/openvpn/update-systemd-resolved \
               --down-pre \
-              --route ${MACHINE_IP} 255.255.255.255 net_gateway \
+              --dhcp-option DOMAIN-ROUTE . \
               --route 169.254.0.0 255.255.0.0 net_gateway \
+              ${SYSTEM_DNS:+--route ${SYSTEM_DNS} 255.255.255.255 net_gateway} \
+              ${MACHINE_IP:+--route ${MACHINE_IP} 255.255.255.255 net_gateway} \
+              ${RUNNER_IPS[@]} \
               --config <(echo "${VPN_CONFIG}" | base64 --decode) \
               ${VPN_USERNAME:+--auth-user-pass <(echo -e "${VPN_USERNAME}\n${VPN_PASSWORD}")}
           else
+            RUNNER_IPS="${RUNNER_IPS}" \
             VPN_TOTP="$(totp "$VPN_TOTP_SECRET")" \
             expect \<<-'EOF'
               spawn bash -c "\
@@ -85,8 +96,11 @@ steps:
                   --up-restart \
                   --down /etc/openvpn/update-systemd-resolved \
                   --down-pre \
-                  --route \${MACHINE_IP} 255.255.255.255 net_gateway \
+                  --dhcp-option DOMAIN-ROUTE . \
                   --route 169.254.0.0 255.255.0.0 net_gateway \
+                  \${SYSTEM_DNS:+--route \${SYSTEM_DNS} 255.255.255.255 net_gateway} \
+                  \${MACHINE_IP:+--route \${MACHINE_IP} 255.255.255.255 net_gateway} \
+                  \${RUNNER_IPS} \
                   --config <(echo \"\${VPN_CONFIG}\" | base64 --decode) \
                   \${VPN_USERNAME:+--auth-user-pass <(echo -e \"\${VPN_USERNAME}\n\${VPN_PASSWORD}\")} \
                   \${VPN_TOTP_SECRET:+--connect-retry-max 5 --connect-retry 0 --auth-retry interact}\
