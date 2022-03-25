@@ -19,19 +19,30 @@ steps:
       name: Install OpenVPN
       when: << parameters.when >>
       command: |
-        package=/tmp/openvpn
+        if [[ "$OSTYPE" =~ ^darwin ]]; then
+          echo export PATH="/usr/local/bin:/usr/local/sbin:$PATH" >> $BASH_ENV
+          export HOMEBREW_NO_AUTO_UPDATE=1
+          brew install openvpn
+          brew install coreutils
 
-        if [ ! -d "${package}" ]; then
-          mkdir -p "${package}"
-          sudo apt-get update
-          sudo apt-get install -d -o=dir::cache="${package}" \
-            expect \
-            net-tools \
-            openvpn \
-            openvpn-systemd-resolved
+          git clone https://github.com/andrewgdotcom/openvpn-mac-dns.git /usr/local/Cellar/openvpn/openvpn-mac-dns
+          cd /usr/local/Cellar/openvpn/openvpn-mac-dns
+          git reset --hard e31cd47de5f1bf5b376988597ef5a46b3944bf3e
+          ln -s /usr/local/Cellar/openvpn/openvpn-mac-dns/etc/openvpn/update-resolv-conf /usr/local/sbin/update-resolv-conf
+        else
+          package=/tmp/openvpn
+
+          if [ ! -d "${package}" ]; then
+            mkdir -p "${package}"
+            sudo apt-get update
+            sudo apt-get install -d -o=dir::cache="${package}" \
+              expect \
+              openvpn \
+              openvpn-systemd-resolved
+          fi
+
+          sudo dpkg -R -i "${package}"
         fi
-
-        sudo dpkg -R -i "${package}"
 
   - save_cache:
       name: Cache OpenVPN package

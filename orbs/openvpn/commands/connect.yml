@@ -51,8 +51,20 @@ steps:
         export VPN_USERNAME="${<< parameters.username >>:-}"
         export VPN_PASSWORD="${<< parameters.password >>:-}"
         export VPN_TOTP_SECRET="${<< parameters.totp-secret >>:-}"
-        export SYSTEM_DNS=$(systemd-resolve --status | grep 'DNS Servers' | awk '{print $3}')
-        export MACHINE_IP=$(ss -Hnto state established '( sport = :ssh )' | head -n1 | awk '{ split($4, a, ":"); print a[1] }')
+
+        if [[ "$OSTYPE" =~ ^darwin ]]; then
+          export SYSTEM_DNS=$(scutil --dns | grep -o "[0-9]\+\.[0-9]\+\.[0-9]\+\.[0-9]\+" | head -n 1)
+          export MACHINE_IP="$(netstat -an | grep '\.2222\s.*ESTABLISHED' | head -n1 | awk '{ split($5, a, "."); print a[1] "." a[2] "." a[3] "." a[4] }')"
+          export SYSTEMD_RESOLVED="/usr/local/sbin/update-resolv-conf"
+        else
+          export SYSTEM_DNS=$(systemd-resolve --status | grep 'DNS Servers' | awk '{print $3}')
+          export MACHINE_IP=$(ss -Hnto state established '( sport = :ssh )' | head -n1 | awk '{ split($4, a, ":"); print a[1] }')
+          export SYSTEMD_RESOLVED="/etc/openvpn/update-systemd-resolved"
+        fi
+
+        echo "DNS: ${SYSTEM_DNS}"
+        echo "IP: ${MACHINE_IP}"
+        echo "Resolver: ${SYSTEMD_RESOLVED}"
 
         RUNNER_IPS=()
         for IP in $(host runner.circleci.com | awk '{ print $4; }')
@@ -72,10 +84,9 @@ steps:
           if [[ -z "${VPN_TOTP_SECRET}" ]]; then
             openvpn \
               --script-security 2 \
-              --setenv PATH '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin' \
-              --up /etc/openvpn/update-systemd-resolved \
+              --up ${SYSTEMD_RESOLVED} \
               --up-restart \
-              --down /etc/openvpn/update-systemd-resolved \
+              --down ${SYSTEMD_RESOLVED} \
               --down-pre \
               --dhcp-option DOMAIN-ROUTE . \
               --route 169.254.0.0 255.255.0.0 net_gateway \
@@ -85,29 +96,30 @@ steps:
               --config <(echo "${VPN_CONFIG}" | base64 --decode) \
               ${VPN_USERNAME:+--auth-user-pass <(echo -e "${VPN_USERNAME}\n${VPN_PASSWORD}")}
           else
-            RUNNER_IPS="${RUNNER_IPS}" \
+            RUNNER_IPS="${RUNNER_IPS[@]}" \
             VPN_TOTP="$(totp "$VPN_TOTP_SECRET")" \
             expect \<<-'EOF'
               spawn bash -c "\
                 openvpn \
                   --script-security 2 \
-                  --setenv PATH '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin' \
-                  --up /etc/openvpn/update-systemd-resolved \
+                  --up \${SYSTEMD_RESOLVED} \
                   --up-restart \
-                  --down /etc/openvpn/update-systemd-resolved \
+                  --down \${SYSTEMD_RESOLVED} \
                   --down-pre \
                   --dhcp-option DOMAIN-ROUTE . \
                   --route 169.254.0.0 255.255.0.0 net_gateway \
                   \${SYSTEM_DNS:+--route \${SYSTEM_DNS} 255.255.255.255 net_gateway} \
                   \${MACHINE_IP:+--route \${MACHINE_IP} 255.255.255.255 net_gateway} \
-                  \${RUNNER_IPS} \
+                  \${RUNNER_IPS\[@\]} \
                   --config <(echo \"\${VPN_CONFIG}\" | base64 --decode) \
                   \${VPN_USERNAME:+--auth-user-pass <(echo -e \"\${VPN_USERNAME}\n\${VPN_PASSWORD}\")} \
                   \${VPN_TOTP_SECRET:+--connect-retry-max 5 --connect-retry 0 --auth-retry interact}\
               "
 
-              expect "\nCHALLENGE:"
-              send "$::env(VPN_TOTP)\n"
+              expect "\nCHALLENGE:" {
+                send "$::env(VPN_TOTP)\n"
+              }
+
               expect -timeout -1 eof
         EOF
           fi
